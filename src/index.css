@@ -1,0 +1,31 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg:#0b1020; --panel:#121a30; --border:#2b3657; --text:#e8eefc; --muted:#8ea0c7; --accent:#4ea3ff;
+}
+
+body { @apply bg-[color:var(--bg)] text-[color:var(--text)]; }
+
+.wrap { @apply max-w-5xl md:max-w-6xl mx-auto px-4 py-6 md:py-8; }
+.sub { @apply text-sm md:text-base; color: var(--muted); }
+
+.tabs { @apply flex gap-2 mb-4; }
+.tab { @apply px-3 py-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--panel)] text-[color:var(--text)] hover:opacity-90; }
+.tab.active { @apply outline outline-2 outline-[color:var(--border)]; }
+
+.card { @apply bg-[color:var(--panel)] border border-[color:var(--border)] rounded-2xl p-4 md:p-5 shadow-soft; }
+.card h2 { @apply text-base md:text-lg font-semibold mb-2 flex items-center gap-2; }
+
+label.label { @apply block text-xs md:text-sm mb-1; color: var(--muted); }
+input, select, textarea { @apply w-full rounded-xl border border-[color:var(--border)] bg-[#0b1328] px-3 py-2 text-[color:var(--text)]; }
+textarea { @apply min-h-[80px]; }
+
+.row { @apply flex items-center gap-2; }
+.btn { @apply inline-flex items-center gap-2 rounded-xl border border-[color:var(--border)] px-3 py-2 bg-[color:var(--panel)] text-[color:var(--text)] hover:opacity-90; }
+.btn.primary { @apply bg-[#0e2760] border-[#173a8a]; }
+.muted { color: var(--muted); }
+.pill { @apply inline-block px-2 py-0.5 rounded-full border border-[color:var(--border)] ml-2 text-xs; }
+.total { @apply font-bold; }
+.role { @apply bg-[#0c1430] border border-dashed border-[color:var(--border)] p-3 rounded-2xl; }
