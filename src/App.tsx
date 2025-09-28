@@ -45,7 +45,12 @@ type Scenario = {
 
 const CCY = ['USD','EUR','GBP','BRL','MXN','INR','CNY','JPY','KRW','AED','SAR','TRY','CAD','AUD','ZAR']
 const num = (n:any)=> isFinite(Number(n))? Number(n):0
-const fmt = (n:number, ccy:string)=> new Intl.NumberFormat(undefined,{style:'currency',currency:ccy,maximumFractionDigits:2}).format(n||0)
+const fmt = (n:number, ccy:string)=>
+  new Intl.NumberFormat(undefined, {
+    style: 'currency',
+    currency: ccy,
+    maximumFractionDigits: 2,
+  }).format(n || 0)
 
 const defaultStaff: StaffingItem = {
   id: crypto.randomUUID(),
