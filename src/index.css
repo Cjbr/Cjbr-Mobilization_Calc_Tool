@@ -29,3 +29,4 @@ textarea { @apply min-h-[80px]; }
 .pill { @apply inline-block px-2 py-0.5 rounded-full border border-[color:var(--border)] ml-2 text-xs; }
 .total { @apply font-bold; }
 .role { @apply bg-[#0c1430] border border-dashed border-[color:var(--border)] p-3 rounded-2xl; }
+.actions { @apply flex flex-wrap gap-2 my-4; }
