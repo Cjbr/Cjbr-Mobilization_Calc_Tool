@@ -1,5 +1,5 @@
 
-import React, { useMemo, useState, useEffect } from 'react'
+import React, { useMemo, useState, useEffect, useRef } from 'react'
 
 type StaffingItem = {
   id: string
@@ -51,6 +51,50 @@ const fmt = (n:number, ccy:string)=>
     currency: ccy,
     maximumFractionDigits: 2,
   }).format(n || 0)
+
+const STORAGE_KEY = 'mobilization_pages'
+
+const escapeHtml = (value: string)=>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+
+const safeFileName = (title: string, suffix: string)=>{
+  const base = title.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+  return (base ? `${base}-${suffix}` : suffix).replace(/-+/g, '-')
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null
+
+const isScenario = (value: unknown): value is Scenario => {
+  if (!isRecord(value)) return false
+  const { meta, staffing, routing, visasSecurity, insurance, localTransport, allowances, taxes, contingencyPct, currency } = value
+  if (!isRecord(meta) || typeof meta.title !== 'string' || typeof meta.notes !== 'string') return false
+  if (!Array.isArray(staffing) || staffing.some(st => !isRecord(st) || typeof st.id !== 'string' || typeof st.role !== 'string')) return false
+  if (!isRecord(routing) || typeof routing.origin !== 'string' || typeof routing.destination !== 'string' || !Array.isArray(routing.legs)) return false
+  if (routing.legs.some(leg => !isRecord(leg) || typeof leg.id !== 'string' || typeof leg.from !== 'string' || typeof leg.to !== 'string' || typeof leg.airfare !== 'string')) return false
+  if (!isRecord(visasSecurity) || typeof visasSecurity.visaCost !== 'string' || typeof visasSecurity.workPermitCost !== 'string' || typeof visasSecurity.securityCost !== 'string') return false
+  if (!isRecord(insurance) || typeof insurance.travelPolicy !== 'string' || typeof insurance.healthPerDay !== 'string' || typeof insurance.extraFixed !== 'string') return false
+  if (!isRecord(localTransport) || typeof localTransport.trainCost !== 'string' || typeof localTransport.useCar !== 'boolean') return false
+  if (!isRecord(allowances) || typeof allowances.hotelPerNight !== 'string' || typeof allowances.mealsPerDay !== 'string' || typeof allowances.laundryPerWeek !== 'string' || typeof allowances.incidentalsPerDay !== 'string') return false
+  if (!isRecord(taxes) || typeof taxes.localTaxPct !== 'string' || typeof taxes.withholdingFixed !== 'string' || typeof taxes.applyTaxToLaborOnly !== 'boolean') return false
+  if (typeof contingencyPct !== 'string') return false
+  if (!isRecord(currency) || typeof currency.base !== 'string' || typeof currency.showTarget !== 'boolean' || typeof currency.target !== 'string' || typeof currency.rateBaseToTarget !== 'string') return false
+  return true
+}
+
+const sanitizeScenario = (value: Scenario): Scenario => ({
+  ...value,
+  staffing: value.staffing.map(st => ({ ...st, id: st.id || crypto.randomUUID() })),
+  routing: {
+    ...value.routing,
+    legs: value.routing.legs.map(leg => ({ ...leg, id: leg.id || crypto.randomUUID() })),
+  },
+})
 
 const defaultStaff: StaffingItem = {
   id: crypto.randomUUID(),
@@ -104,9 +148,22 @@ function Card({title, children, right}:{title:string, children:React.ReactNode, 
 
 export default function App(){
   const [tab, setTab] = useState<'inputs'|'summary'>('inputs')
-  const [sc, setSc] = useState<Scenario>(() => initial)
+  const [sc, setSc] = useState<Scenario>(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY)
+      if (stored){
+        const parsed = JSON.parse(stored)
+        if (isScenario(parsed)) return sanitizeScenario(parsed)
+      }
+    } catch (err){
+      console.warn('Failed to restore scenario from storage', err)
+    }
+    return initial
+  })
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  useEffect(()=>{ localStorage.setItem('mobilization_pages', JSON.stringify(sc)) },[sc])
+  useEffect(()=>{ localStorage.setItem(STORAGE_KEY, JSON.stringify(sc)) },[sc])
+
 
   // Travel & VSI
   const airfareTotal = useMemo(()=> sc.routing.legs.reduce((s,l)=> s + num(l.airfare), 0), [sc.routing.legs])
@@ -152,6 +209,98 @@ export default function App(){
   const grandTotalBase = subtotal + contingencyTotal
   const converted = useMemo(()=> sc.currency.showTarget ? grandTotalBase * (num(sc.currency.rateBaseToTarget)||0) : null, [sc.currency.showTarget, sc.currency.rateBaseToTarget, grandTotalBase])
 
+  const exportToExcel = ()=>{
+    const summaryRows: Array<[string, number]> = [
+      ['Staffing', laborTotal],
+      ['Visas/Security/Insurance', vsiTotal],
+      ['Allowances', perDiemTotal],
+      ['Airfare', airfareTotal],
+      ['Local transport', localTransportTotal],
+      ['Taxes + Contingency', taxesTotal + contingencyTotal],
+      ['Grand total', grandTotalBase],
+    ]
+    const staffingRows: Array<[string, number, number]> = laborBreakdown.map(r => [r.role, r.qty, r.total])
+    const legsRows = sc.routing.legs.map(leg => [leg.from, leg.to, leg.purpose || '', leg.airfare])
+    const notes = escapeHtml(sc.meta.notes).replace(/\n/g, '<br/>')
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8" /><title>${escapeHtml(sc.meta.title||'Mobilization scenario')}</title></head><body>` +
+      `<table border="1" cellspacing="0" cellpadding="4"><caption><strong>Totals (${sc.currency.base})</strong></caption>` +
+      `<tr><th>Category</th><th>Amount (${sc.currency.base})</th></tr>` +
+      summaryRows.map(([label, amount]) => `<tr><td>${escapeHtml(label)}</td><td>${amount.toFixed(2)}</td></tr>`).join('') +
+      `</table>` +
+      `<br/>` +
+      `<table border="1" cellspacing="0" cellpadding="4"><caption><strong>Staffing</strong></caption>` +
+      `<tr><th>Role</th><th>Qty</th><th>Total (${sc.currency.base})</th></tr>` +
+      staffingRows.map(([role, qty, total]) => `<tr><td>${escapeHtml(String(role))}</td><td>${qty}</td><td>${Number(total).toFixed(2)}</td></tr>`).join('') +
+      `</table>` +
+      `<br/>` +
+      `<table border="1" cellspacing="0" cellpadding="4"><caption><strong>Travel legs</strong></caption>` +
+      `<tr><th>From</th><th>To</th><th>Purpose</th><th>Airfare (${sc.currency.base})</th></tr>` +
+      legsRows.map(([from, to, purpose, airfare]) => `<tr><td>${escapeHtml(String(from))}</td><td>${escapeHtml(String(to))}</td><td>${escapeHtml(String(purpose))}</td><td>${escapeHtml(String(airfare))}</td></tr>`).join('') +
+      `</table>` +
+      `<br/>` +
+      `<table border="1" cellspacing="0" cellpadding="4"><caption><strong>General</strong></caption>` +
+      `<tr><th>Title</th><td>${escapeHtml(sc.meta.title)}</td></tr>` +
+      `<tr><th>Notes</th><td>${notes}</td></tr>` +
+      `<tr><th>Origin</th><td>${escapeHtml(sc.routing.origin)}</td></tr>` +
+      `<tr><th>Destination</th><td>${escapeHtml(sc.routing.destination)}</td></tr>` +
+      `</table>` +
+      `</body></html>`
+
+    const blob = new Blob(['\ufeff' + html], { type: 'application/vnd.ms-excel' })
+    const link = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    link.href = url
+    link.download = `${safeFileName(sc.meta.title || 'mobilization', 'simulation')}.xls`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
+  const saveBackup = ()=>{
+    const blob = new Blob([JSON.stringify(sc, null, 2)], { type: 'application/json' })
+    const link = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    link.href = url
+    link.download = `${safeFileName(sc.meta.title || 'mobilization', 'backup')}.json`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
+  const requestLoadBackup = ()=> fileInputRef.current?.click()
+
+  const handleBackupLoad = (event: React.ChangeEvent<HTMLInputElement>)=>{
+    const file = event.target.files?.[0]
+    if (!file){
+      event.target.value = ''
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = ()=>{
+      try {
+        const parsed = JSON.parse(String(reader.result))
+        if (isScenario(parsed)){
+          setSc(sanitizeScenario(parsed))
+        } else {
+          throw new Error('Invalid scenario shape')
+        }
+      } catch (err){
+        console.error('Failed to load backup', err)
+        alert('Could not load backup. Please ensure the file was exported from this tool.')
+      } finally {
+        event.target.value = ''
+      }
+    }
+    reader.onerror = ()=>{
+      console.error('Error reading backup file', reader.error)
+      alert('There was a problem reading the backup file.')
+      event.target.value = ''
+    }
+    reader.readAsText(file)
+  }
+
   const addLeg = ()=> setSc(s=> ({...s, routing: {...s.routing, legs: [...s.routing.legs, { id: crypto.randomUUID(), from: '', to: '', purpose: '', airfare: '0'}] }}))
   const rmLeg = (id:string)=> setSc(s=> ({...s, routing: {...s.routing, legs: s.routing.legs.filter(l=> l.id!==id)} }))
   const addRole = ()=> setSc(s=> ({...s, staffing: [...s.staffing, { ...defaultStaff, id: crypto.randomUUID(), role: 'Engineer'}]}))
@@ -161,6 +310,13 @@ export default function App(){
     <div className="wrap">
       <h1 className="text-2xl md:text-3xl font-semibold">Engineer Mobilization Calculator</h1>
       <p className="sub">V0.0</p>
+
+      <div className="actions">
+        <button className="btn" onClick={exportToExcel}>Export to Excel</button>
+        <button className="btn" onClick={saveBackup}>Save backup</button>
+        <button className="btn" onClick={requestLoadBackup}>Load backup</button>
+        <input ref={fileInputRef} type="file" accept="application/json" onChange={handleBackupLoad} style={{ display: 'none' }} />
+      </div>
 
       <div className="tabs">
         <button className={'tab ' + (tab==='inputs'?'active':'')} onClick={()=>setTab('inputs')}>Inputs</button>
