@@ -232,7 +232,13 @@ export default function App(){
   const perDiemTotal = hotelTotal + mealsTotal + laundryTotal + incTotal
 
   // Others
-  const socialSecurityTotal = useMemo(() => (num(sc.others.socialSecurityPerMonth) * Math.max(maxDays, 0)) / 30, [sc.others.socialSecurityPerMonth, maxDays])
+  const socialSecurityTotal = useMemo(() => {
+    const monthlyCost = num(sc.others.socialSecurityPerMonth)
+    const days = Math.max(maxDays, 0)
+    if (monthlyCost <= 0 || days <= 0) return 0
+    const monthsDue = Math.max(1, Math.ceil(days / 22))
+    return monthlyCost * monthsDue
+  }, [sc.others.socialSecurityPerMonth, maxDays])
   const otherExtrasTotal = useMemo(() => sc.others.extraCosts.reduce((sum, extra) => sum + num(extra.amount), 0), [sc.others.extraCosts])
   const othersTotal = useMemo(() => num(sc.others.registrationFixed) + socialSecurityTotal + otherExtrasTotal, [sc.others.registrationFixed, socialSecurityTotal, otherExtrasTotal])
 
