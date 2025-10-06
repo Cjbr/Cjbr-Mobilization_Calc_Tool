@@ -39,6 +39,7 @@ type Scenario = {
   }
   allowances: { hotelPerNight: string; mealsPerDay: string; laundryPerWeek: string; incidentalsPerDay: string }
   taxes: { localTaxPct: string; withholdingFixed: string; applyTaxToLaborOnly: boolean }
+  personalTax: { originConsulting: string; destinationConsulting: string }
   contingencyPct: string
   currency: { base: string; showTarget: boolean; target: string; rateBaseToTarget: string }
 }
@@ -72,7 +73,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const isScenario = (value: unknown): value is Scenario => {
   if (!isRecord(value)) return false
-  const { meta, staffing, routing, visasSecurity, insurance, localTransport, allowances, taxes, contingencyPct, currency } = value
+  const { meta, staffing, routing, visasSecurity, insurance, localTransport, allowances, taxes, personalTax, contingencyPct, currency } = value
   if (!isRecord(meta) || typeof meta.title !== 'string' || typeof meta.notes !== 'string') return false
   if (!Array.isArray(staffing) || staffing.some(st => !isRecord(st) || typeof st.id !== 'string' || typeof st.role !== 'string')) return false
   if (!isRecord(routing) || typeof routing.origin !== 'string' || typeof routing.destination !== 'string' || !Array.isArray(routing.legs)) return false
@@ -82,6 +83,9 @@ const isScenario = (value: unknown): value is Scenario => {
   if (!isRecord(localTransport) || typeof localTransport.trainCost !== 'string' || typeof localTransport.useCar !== 'boolean') return false
   if (!isRecord(allowances) || typeof allowances.hotelPerNight !== 'string' || typeof allowances.mealsPerDay !== 'string' || typeof allowances.laundryPerWeek !== 'string' || typeof allowances.incidentalsPerDay !== 'string') return false
   if (!isRecord(taxes) || typeof taxes.localTaxPct !== 'string' || typeof taxes.withholdingFixed !== 'string' || typeof taxes.applyTaxToLaborOnly !== 'boolean') return false
+  if (personalTax !== undefined) {
+    if (!isRecord(personalTax) || typeof personalTax.originConsulting !== 'string' || typeof personalTax.destinationConsulting !== 'string') return false
+  }
   if (typeof contingencyPct !== 'string') return false
   if (!isRecord(currency) || typeof currency.base !== 'string' || typeof currency.showTarget !== 'boolean' || typeof currency.target !== 'string' || typeof currency.rateBaseToTarget !== 'string') return false
   return true
@@ -93,6 +97,10 @@ const sanitizeScenario = (value: Scenario): Scenario => ({
   routing: {
     ...value.routing,
     legs: value.routing.legs.map(leg => ({ ...leg, id: leg.id || crypto.randomUUID() })),
+  },
+  personalTax: {
+    originConsulting: String(value.personalTax?.originConsulting ?? '0'),
+    destinationConsulting: String(value.personalTax?.destinationConsulting ?? '0'),
   },
 })
 
@@ -133,6 +141,7 @@ const initial: Scenario = {
   },
   allowances: { hotelPerNight: '140', mealsPerDay: '65', laundryPerWeek: '25', incidentalsPerDay: '12' },
   taxes: { localTaxPct: '0', withholdingFixed: '0', applyTaxToLaborOnly: false },
+  personalTax: { originConsulting: '0', destinationConsulting: '0' },
   contingencyPct: '7.5',
   currency: { base: 'USD', showTarget: false, target: 'EUR', rateBaseToTarget: '0.92' }
 }
@@ -172,6 +181,7 @@ export default function App(){
   const maxDays = useMemo(()=> sc.staffing.reduce((m,s)=> Math.max(m, s.onsiteDays), 0), [sc.staffing])
   const insuranceTotal = useMemo(()=> num(sc.insurance.travelPolicy) + num(sc.insurance.extraFixed) + num(sc.insurance.healthPerDay)*maxDays, [sc.insurance, maxDays])
   const vsiTotal = visaTotal + securityTotal + insuranceTotal
+  const personalTaxTotal = useMemo(()=> num(sc.personalTax.originConsulting) + num(sc.personalTax.destinationConsulting), [sc.personalTax])
 
   // Local transport
   const carFuelCost = useMemo(()=> num(sc.localTransport.distanceKm)*(num(sc.localTransport.consumptionLPer100)/100)*num(sc.localTransport.fuelPricePerL), [sc.localTransport])
@@ -202,9 +212,9 @@ export default function App(){
 
   // Totals & taxes
   const travelFixedTotal = airfareTotal + vsiTotal + localTransportTotal
-  const taxableBase = sc.taxes.applyTaxToLaborOnly ? laborTotal : (laborTotal + perDiemTotal + travelFixedTotal)
+  const taxableBase = sc.taxes.applyTaxToLaborOnly ? laborTotal : (laborTotal + perDiemTotal + travelFixedTotal + personalTaxTotal)
   const taxesTotal = taxableBase * (num(sc.taxes.localTaxPct)/100) + num(sc.taxes.withholdingFixed)
-  const subtotal = laborTotal + perDiemTotal + travelFixedTotal + taxesTotal
+  const subtotal = laborTotal + perDiemTotal + travelFixedTotal + personalTaxTotal + taxesTotal
   const contingencyTotal = subtotal * (num(sc.contingencyPct)/100)
   const grandTotalBase = subtotal + contingencyTotal
   const converted = useMemo(()=> sc.currency.showTarget ? grandTotalBase * (num(sc.currency.rateBaseToTarget)||0) : null, [sc.currency.showTarget, sc.currency.rateBaseToTarget, grandTotalBase])
@@ -216,6 +226,7 @@ export default function App(){
       ['Allowances', perDiemTotal],
       ['Airfare', airfareTotal],
       ['Local transport', localTransportTotal],
+      ['Personal tax support', personalTaxTotal],
       ['Taxes + Contingency', taxesTotal + contingencyTotal],
       ['Grand total', grandTotalBase],
     ]
@@ -433,6 +444,14 @@ export default function App(){
             <div className="mt-1 text-sm" style={{color:'var(--muted)'}}>Allowances total: <span className="total">{fmt(perDiemTotal, sc.currency.base)}</span></div>
           </Card>
 
+          <Card title="Tax - Personal">
+            <div className="grid gap-3 md:grid-cols-2">
+              <div><label className="label">Tax consulting fees Country Origin (year)</label><input value={sc.personalTax.originConsulting} onChange={e=> setSc({...sc, personalTax:{...sc.personalTax, originConsulting:e.target.value}})} /></div>
+              <div><label className="label">Tax consulting fees Country Destination (year)</label><input value={sc.personalTax.destinationConsulting} onChange={e=> setSc({...sc, personalTax:{...sc.personalTax, destinationConsulting:e.target.value}})} /></div>
+            </div>
+            <div className="mt-1 text-sm" style={{color:'var(--muted)'}}>Personal tax support total: <span className="total">{fmt(personalTaxTotal, sc.currency.base)}</span></div>
+          </Card>
+
           <Card title="Taxes, Contingency & Currency">
             <div className="grid gap-3 md:grid-cols-3">
               <div><label className="label">Tax/VAT (%)</label><input value={sc.taxes.localTaxPct} onChange={e=> setSc({...sc, taxes:{...sc.taxes, localTaxPct:e.target.value}})} /></div>
@@ -474,6 +493,7 @@ export default function App(){
               <div>Allowances: <span className="total">{fmt(perDiemTotal, sc.currency.base)}</span></div>
               <div>Airfare: <span className="total">{fmt(airfareTotal, sc.currency.base)}</span></div>
               <div>Local transport: <span className="total">{fmt(localTransportTotal, sc.currency.base)}</span></div>
+              <div>Personal tax support: <span className="total">{fmt(personalTaxTotal, sc.currency.base)}</span></div>
               <div>Taxes + Contingency: <span className="total">{fmt(taxesTotal + contingencyTotal, sc.currency.base)}</span></div>
               <div className="text-lg mt-2">GRAND TOTAL: <span className="total">{fmt(grandTotalBase, sc.currency.base)}</span> {sc.currency.showTarget && <span className="muted"> — converted: {fmt(converted||0, sc.currency.target)}</span>}</div>
             </div>
