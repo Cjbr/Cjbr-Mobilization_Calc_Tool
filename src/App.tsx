@@ -428,7 +428,7 @@ export default function App(){
               <div><label className="label">Hotel / night</label><input value={sc.allowances.hotelPerNight} onChange={e=> setSc({...sc, allowances:{...sc.allowances, hotelPerNight:e.target.value}})} /></div>
               <div><label className="label">Meals / day</label><input value={sc.allowances.mealsPerDay} onChange={e=> setSc({...sc, allowances:{...sc.allowances, mealsPerDay:e.target.value}})} /></div>
               <div><label className="label">Laundry / week</label><input value={sc.allowances.laundryPerWeek} onChange={e=> setSc({...sc, allowances:{...sc.allowances, laundryPerWeek:e.target.value}})} /></div>
-              <div><label className="label">Incidentals / day</label><input value={sc.allowances.incidentalsPerDay} onChange={e=> setSc({...sc, allowances:{...sc.allowances, incidentalsPerDay:e.target.value}})} /></div>
+              <div><label className="label">Others / day</label><input value={sc.allowances.incidentalsPerDay} onChange={e=> setSc({...sc, allowances:{...sc.allowances, incidentalsPerDay:e.target.value}})} /></div>
             </div>
             <div className="mt-1 text-sm" style={{color:'var(--muted)'}}>Allowances total: <span className="total">{fmt(perDiemTotal, sc.currency.base)}</span></div>
           </Card>
