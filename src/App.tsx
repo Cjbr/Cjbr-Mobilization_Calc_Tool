@@ -281,28 +281,214 @@ export default function App(){
     const staffingRows: Array<[string, number, number]> = laborBreakdown.map(r => [r.role, r.qty, r.total])
     const legsRows = sc.routing.legs.map(leg => [leg.from, leg.to, leg.purpose || '', leg.airfare])
     const notes = escapeHtml(sc.meta.notes).replace(/\n/g, '<br/>')
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8" /><title>${escapeHtml(sc.meta.title||'Mobilization scenario')}</title></head><body>` +
-      `<table border="1" cellspacing="0" cellpadding="4"><caption><strong>Totals (${sc.currency.base})</strong></caption>` +
-      `<tr><th>Category</th><th>Amount (${sc.currency.base})</th></tr>` +
-      summaryRows.map(([label, amount]) => `<tr><td>${escapeHtml(label)}</td><td>${amount.toFixed(2)}</td></tr>`).join('') +
-      `</table>` +
-      `<br/>` +
-      `<table border="1" cellspacing="0" cellpadding="4"><caption><strong>Staffing</strong></caption>` +
-      `<tr><th>Role</th><th>Qty</th><th>Total (${sc.currency.base})</th></tr>` +
-      staffingRows.map(([role, qty, total]) => `<tr><td>${escapeHtml(String(role))}</td><td>${qty}</td><td>${Number(total).toFixed(2)}</td></tr>`).join('') +
-      `</table>` +
-      `<br/>` +
-      `<table border="1" cellspacing="0" cellpadding="4"><caption><strong>Travel legs</strong></caption>` +
-      `<tr><th>From</th><th>To</th><th>Purpose</th><th>Airfare (${sc.currency.base})</th></tr>` +
-      legsRows.map(([from, to, purpose, airfare]) => `<tr><td>${escapeHtml(String(from))}</td><td>${escapeHtml(String(to))}</td><td>${escapeHtml(String(purpose))}</td><td>${escapeHtml(String(airfare))}</td></tr>`).join('') +
-      `</table>` +
-      `<br/>` +
-      `<table border="1" cellspacing="0" cellpadding="4"><caption><strong>General</strong></caption>` +
-      `<tr><th>Title</th><td>${escapeHtml(sc.meta.title)}</td></tr>` +
-      `<tr><th>Notes</th><td>${notes}</td></tr>` +
+    const boolToText = (value: boolean) => (value ? 'Yes' : 'No')
+
+    const summarySheet = (
+      `<div id="SheetSummary">` +
+        `<table border="1" cellspacing="0" cellpadding="4"><caption><strong>Totals (${sc.currency.base})</strong></caption>` +
+        `<tr><th>Category</th><th>Amount (${sc.currency.base})</th></tr>` +
+        summaryRows.map(([label, amount]) => `<tr><td>${escapeHtml(label)}</td><td>${amount.toFixed(2)}</td></tr>`).join('') +
+        `</table>` +
+        `<br/>` +
+        `<table border="1" cellspacing="0" cellpadding="4"><caption><strong>Staffing</strong></caption>` +
+        `<tr><th>Role</th><th>Qty</th><th>Total (${sc.currency.base})</th></tr>` +
+        staffingRows.map(([role, qty, total]) => `<tr><td>${escapeHtml(String(role))}</td><td>${qty}</td><td>${Number(total).toFixed(2)}</td></tr>`).join('') +
+        `</table>` +
+        `<br/>` +
+        `<table border="1" cellspacing="0" cellpadding="4"><caption><strong>Travel legs</strong></caption>` +
+        `<tr><th>From</th><th>To</th><th>Purpose</th><th>Airfare (${sc.currency.base})</th></tr>` +
+        legsRows.map(([from, to, purpose, airfare]) => `<tr><td>${escapeHtml(String(from))}</td><td>${escapeHtml(String(to))}</td><td>${escapeHtml(String(purpose))}</td><td>${escapeHtml(String(airfare))}</td></tr>`).join('') +
+        `</table>` +
+        `<br/>` +
+        `<table border="1" cellspacing="0" cellpadding="4"><caption><strong>General</strong></caption>` +
+        `<tr><th>Title</th><td>${escapeHtml(sc.meta.title)}</td></tr>` +
+        `<tr><th>Notes</th><td>${notes}</td></tr>` +
+        `<tr><th>Origin</th><td>${escapeHtml(sc.routing.origin)}</td></tr>` +
+        `<tr><th>Intermediate</th><td>${escapeHtml(sc.routing.intermediate || '')}</td></tr>` +
+        `<tr><th>Destination</th><td>${escapeHtml(sc.routing.destination)}</td></tr>` +
+        `</table>` +
+      `</div>`
+    )
+
+    const staffingInputsTable = (
+      `<table border="1" cellspacing="0" cellpadding="4"><caption><strong>Staffing (inputs)</strong></caption>` +
+      `<tr>` +
+      `<th>Role</th>` +
+      `<th>Qty</th>` +
+      `<th>Hourly (base)</th>` +
+      `<th>Hours/day</th>` +
+      `<th>On-site days</th>` +
+      `<th>Bill travel time?</th>` +
+      `<th>Travel hours (total)</th>` +
+      `<th>Travel hourly rate</th>` +
+      `<th>Overtime hours/day</th>` +
+      `<th>Overtime multiplier</th>` +
+      `<th>Weekend days</th>` +
+      `<th>Weekend multiplier</th>` +
+      `</tr>` +
+      sc.staffing.map(st => (
+        `<tr>` +
+        `<td>${escapeHtml(st.role)}</td>` +
+        `<td>${st.qty}</td>` +
+        `<td>${escapeHtml(st.billableHourly)}</td>` +
+        `<td>${st.onsiteHoursPerDay}</td>` +
+        `<td>${st.onsiteDays}</td>` +
+        `<td>${boolToText(st.includeTravelTime)}</td>` +
+        `<td>${st.travelHours}</td>` +
+        `<td>${escapeHtml(st.travelHourly)}</td>` +
+        `<td>${st.overtimeHoursPerDay}</td>` +
+        `<td>${escapeHtml(st.overtimeMultiplier)}</td>` +
+        `<td>${st.weekendDays}</td>` +
+        `<td>${escapeHtml(st.weekendMultiplier)}</td>` +
+        `</tr>`
+      )).join('') +
+      `</table>`
+    )
+
+    const travelInputsTable = (
+      `<table border="1" cellspacing="0" cellpadding="4"><caption><strong>Travel & routing</strong></caption>` +
       `<tr><th>Origin</th><td>${escapeHtml(sc.routing.origin)}</td></tr>` +
+      `<tr><th>Intermediate</th><td>${escapeHtml(sc.routing.intermediate || '')}</td></tr>` +
       `<tr><th>Destination</th><td>${escapeHtml(sc.routing.destination)}</td></tr>` +
       `</table>` +
+      `<br/>` +
+      `<table border="1" cellspacing="0" cellpadding="4"><caption><strong>Travel legs (inputs)</strong></caption>` +
+      `<tr><th>From</th><th>To</th><th>Purpose</th><th>Airfare (${sc.currency.base})</th></tr>` +
+      legsRows.map(([from, to, purpose, airfare]) => `<tr><td>${escapeHtml(String(from))}</td><td>${escapeHtml(String(to))}</td><td>${escapeHtml(String(purpose))}</td><td>${escapeHtml(String(airfare))}</td></tr>`).join('') +
+      `</table>`
+    )
+
+    const visasTable = (
+      `<table border="1" cellspacing="0" cellpadding="4"><caption><strong>Visas, security & insurance</strong></caption>` +
+      `<tr><th>Visa cost</th><td>${escapeHtml(sc.visasSecurity.visaCost)}</td></tr>` +
+      `<tr><th>Work permit cost</th><td>${escapeHtml(sc.visasSecurity.workPermitCost)}</td></tr>` +
+      `<tr><th>Security cost</th><td>${escapeHtml(sc.visasSecurity.securityCost)}</td></tr>` +
+      `<tr><th>Travel policy</th><td>${escapeHtml(sc.insurance.travelPolicy)}</td></tr>` +
+      `<tr><th>Health (per day)</th><td>${escapeHtml(sc.insurance.healthPerDay)}</td></tr>` +
+      `<tr><th>Insurance extra fixed</th><td>${escapeHtml(sc.insurance.extraFixed)}</td></tr>` +
+      `</table>`
+    )
+
+    const localTransportTable = (
+      `<table border="1" cellspacing="0" cellpadding="4"><caption><strong>Local transport</strong></caption>` +
+      `<tr><th>Train cost</th><td>${escapeHtml(sc.localTransport.trainCost)}</td></tr>` +
+      `<tr><th>Use rental car?</th><td>${boolToText(sc.localTransport.useCar)}</td></tr>` +
+      `<tr><th>Car days</th><td>${sc.localTransport.carDays}</td></tr>` +
+      `<tr><th>Car daily rate</th><td>${escapeHtml(sc.localTransport.carDailyRate)}</td></tr>` +
+      `<tr><th>Distance (km)</th><td>${escapeHtml(sc.localTransport.distanceKm)}</td></tr>` +
+      `<tr><th>Fuel price per L</th><td>${escapeHtml(sc.localTransport.fuelPricePerL)}</td></tr>` +
+      `<tr><th>Consumption (L/100km)</th><td>${escapeHtml(sc.localTransport.consumptionLPer100)}</td></tr>` +
+      `<tr><th>Tolls</th><td>${escapeHtml(sc.localTransport.tolls)}</td></tr>` +
+      `<tr><th>Parking</th><td>${escapeHtml(sc.localTransport.parking)}</td></tr>` +
+      `<tr><th>Car extra fees</th><td>${escapeHtml(sc.localTransport.carExtraFees)}</td></tr>` +
+      `</table>`
+    )
+
+    const allowancesTable = (
+      `<table border="1" cellspacing="0" cellpadding="4"><caption><strong>Allowances</strong></caption>` +
+      `<tr><th>Hotel per night</th><td>${escapeHtml(sc.allowances.hotelPerNight)}</td></tr>` +
+      `<tr><th>Meals per day</th><td>${escapeHtml(sc.allowances.mealsPerDay)}</td></tr>` +
+      `<tr><th>Laundry per week</th><td>${escapeHtml(sc.allowances.laundryPerWeek)}</td></tr>` +
+      `<tr><th>Incidentals per day</th><td>${escapeHtml(sc.allowances.incidentalsPerDay)}</td></tr>` +
+      `</table>`
+    )
+
+    const othersExtrasRows = sc.others.extraCosts.map((extra, idx) => (
+      `<tr>` +
+      `<td>${idx + 1}</td>` +
+      `<td>${escapeHtml(extra.remark)}</td>` +
+      `<td>${escapeHtml(extra.amount)}</td>` +
+      `</tr>`
+    )).join('')
+
+    const othersTable = (
+      `<table border="1" cellspacing="0" cellpadding="4"><caption><strong>Other costs</strong></caption>` +
+      `<tr><th>Registration (fixed)</th><td>${escapeHtml(sc.others.registrationFixed)}</td></tr>` +
+      `<tr><th>Social security per month</th><td>${escapeHtml(sc.others.socialSecurityPerMonth)}</td></tr>` +
+      `</table>` +
+      `<br/>` +
+      `<table border="1" cellspacing="0" cellpadding="4"><caption><strong>Additional cost lines</strong></caption>` +
+      `<tr><th>#</th><th>Remark</th><th>Amount</th></tr>` +
+      othersExtrasRows +
+      `</table>`
+    )
+
+    const taxesTable = (
+      `<table border="1" cellspacing="0" cellpadding="4"><caption><strong>Taxes</strong></caption>` +
+      `<tr><th>Local tax %</th><td>${escapeHtml(sc.taxes.localTaxPct)}</td></tr>` +
+      `<tr><th>Withholding (fixed)</th><td>${escapeHtml(sc.taxes.withholdingFixed)}</td></tr>` +
+      `<tr><th>Apply tax to labor only?</th><td>${boolToText(sc.taxes.applyTaxToLaborOnly)}</td></tr>` +
+      `</table>`
+    )
+
+    const personalTaxTable = (
+      `<table border="1" cellspacing="0" cellpadding="4"><caption><strong>Personal tax support</strong></caption>` +
+      `<tr><th>Origin consulting</th><td>${escapeHtml(sc.personalTax.originConsulting)}</td></tr>` +
+      `<tr><th>Destination consulting</th><td>${escapeHtml(sc.personalTax.destinationConsulting)}</td></tr>` +
+      `</table>`
+    )
+
+    const contingencyCurrencyTable = (
+      `<table border="1" cellspacing="0" cellpadding="4"><caption><strong>Contingency & currency</strong></caption>` +
+      `<tr><th>Contingency %</th><td>${escapeHtml(sc.contingencyPct)}</td></tr>` +
+      `<tr><th>Base currency</th><td>${escapeHtml(sc.currency.base)}</td></tr>` +
+      `<tr><th>Show converted total?</th><td>${boolToText(sc.currency.showTarget)}</td></tr>` +
+      `<tr><th>Target currency</th><td>${escapeHtml(sc.currency.target)}</td></tr>` +
+      `<tr><th>Conversion rate (base → target)</th><td>${escapeHtml(sc.currency.rateBaseToTarget)}</td></tr>` +
+      `</table>`
+    )
+
+    const inputsSheet = (
+      `<div id="SheetInputs">` +
+        `<table border="1" cellspacing="0" cellpadding="4"><caption><strong>General</strong></caption>` +
+        `<tr><th>Activity / Task</th><td>${escapeHtml(sc.meta.title)}</td></tr>` +
+        `<tr><th>Notes</th><td>${notes}</td></tr>` +
+        `</table>` +
+        `<br/>` +
+        staffingInputsTable +
+        `<br/>` +
+        travelInputsTable +
+        `<br/>` +
+        visasTable +
+        `<br/>` +
+        localTransportTable +
+        `<br/>` +
+        allowancesTable +
+        `<br/>` +
+        othersTable +
+        `<br/>` +
+        taxesTable +
+        `<br/>` +
+        personalTaxTable +
+        `<br/>` +
+        contingencyCurrencyTable +
+      `</div>`
+    )
+
+    const html =
+      `<!DOCTYPE html>` +
+      `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">` +
+      `<head>` +
+      `<meta charset="utf-8" />` +
+      `<title>${escapeHtml(sc.meta.title||'Mobilization scenario')}</title>` +
+      `<!--[if gte mso 9]><xml>` +
+      `<x:ExcelWorkbook>` +
+      `<x:ExcelWorksheets>` +
+      `<x:ExcelWorksheet>` +
+      `<x:Name>Summary</x:Name>` +
+      `<x:WorksheetSource HRef="#SheetSummary"/>` +
+      `</x:ExcelWorksheet>` +
+      `<x:ExcelWorksheet>` +
+      `<x:Name>Inputs</x:Name>` +
+      `<x:WorksheetSource HRef="#SheetInputs"/>` +
+      `</x:ExcelWorksheet>` +
+      `</x:ExcelWorksheets>` +
+      `</x:ExcelWorkbook>` +
+      `</xml><![endif]-->` +
+      `</head>` +
+      `<body>` +
+      summarySheet +
+      inputsSheet +
       `</body></html>`
 
     const blob = new Blob(['\ufeff' + html], { type: 'application/vnd.ms-excel' })
