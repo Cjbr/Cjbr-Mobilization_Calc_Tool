@@ -19,6 +19,8 @@ type StaffingItem = {
 
 type Leg = { id: string; from: string; to: string; purpose?: string; airfare: string }
 
+type AdditionalCost = { amount: string; remark: string }
+
 type Scenario = {
   meta: { title: string; notes: string }
   staffing: StaffingItem[]
@@ -38,11 +40,14 @@ type Scenario = {
     carExtraFees: string
   }
   allowances: { hotelPerNight: string; mealsPerDay: string; laundryPerWeek: string; incidentalsPerDay: string }
+  others: { registrationFixed: string; socialSecurityPerMonth: string; extraCosts: AdditionalCost[] }
   taxes: { localTaxPct: string; withholdingFixed: string; applyTaxToLaborOnly: boolean }
   personalTax: { originConsulting: string; destinationConsulting: string }
   contingencyPct: string
   currency: { base: string; showTarget: boolean; target: string; rateBaseToTarget: string }
 }
+
+type ScenarioWithUnknownOthers = Omit<Scenario, 'others'> & { others?: unknown }
 
 const CCY = ['USD','EUR','GBP','BRL','MXN','INR','CNY','JPY','KRW','AED','SAR','TRY','CAD','AUD','ZAR']
 const num = (n:any)=> isFinite(Number(n))? Number(n):0
@@ -71,9 +76,9 @@ const safeFileName = (title: string, suffix: string)=>{
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null
 
-const isScenario = (value: unknown): value is Scenario => {
+const isScenario = (value: unknown): value is ScenarioWithUnknownOthers => {
   if (!isRecord(value)) return false
-  const { meta, staffing, routing, visasSecurity, insurance, localTransport, allowances, taxes, personalTax, contingencyPct, currency } = value
+  const { meta, staffing, routing, visasSecurity, insurance, localTransport, allowances, others, taxes, personalTax, contingencyPct, currency } = value
   if (!isRecord(meta) || typeof meta.title !== 'string' || typeof meta.notes !== 'string') return false
   if (!Array.isArray(staffing) || staffing.some(st => !isRecord(st) || typeof st.id !== 'string' || typeof st.role !== 'string')) return false
   if (!isRecord(routing) || typeof routing.origin !== 'string' || typeof routing.destination !== 'string' || !Array.isArray(routing.legs)) return false
@@ -82,6 +87,10 @@ const isScenario = (value: unknown): value is Scenario => {
   if (!isRecord(insurance) || typeof insurance.travelPolicy !== 'string' || typeof insurance.healthPerDay !== 'string' || typeof insurance.extraFixed !== 'string') return false
   if (!isRecord(localTransport) || typeof localTransport.trainCost !== 'string' || typeof localTransport.useCar !== 'boolean') return false
   if (!isRecord(allowances) || typeof allowances.hotelPerNight !== 'string' || typeof allowances.mealsPerDay !== 'string' || typeof allowances.laundryPerWeek !== 'string' || typeof allowances.incidentalsPerDay !== 'string') return false
+  if (others !== undefined) {
+    if (!isRecord(others) || typeof others.registrationFixed !== 'string' || typeof others.socialSecurityPerMonth !== 'string') return false
+    if (!Array.isArray(others.extraCosts) || others.extraCosts.some(extra => !isRecord(extra) || typeof extra.amount !== 'string' || typeof extra.remark !== 'string')) return false
+  }
   if (!isRecord(taxes) || typeof taxes.localTaxPct !== 'string' || typeof taxes.withholdingFixed !== 'string' || typeof taxes.applyTaxToLaborOnly !== 'boolean') return false
   if (personalTax !== undefined) {
     if (!isRecord(personalTax) || typeof personalTax.originConsulting !== 'string' || typeof personalTax.destinationConsulting !== 'string') return false
@@ -91,7 +100,26 @@ const isScenario = (value: unknown): value is Scenario => {
   return true
 }
 
-const sanitizeScenario = (value: Scenario): Scenario => ({
+const sanitizeOthers = (value: ScenarioWithUnknownOthers['others']): Scenario['others'] => {
+  const extrasRaw = isRecord(value) && Array.isArray(value.extraCosts) ? value.extraCosts : []
+  const extraCosts: AdditionalCost[] = extrasRaw.slice(0, 3).map(extra => {
+    if (isRecord(extra)) {
+      return {
+        amount: typeof extra.amount === 'string' ? extra.amount : '0',
+        remark: typeof extra.remark === 'string' ? extra.remark : '',
+      }
+    }
+    return { amount: '0', remark: '' }
+  })
+  while (extraCosts.length < 3) extraCosts.push({ amount: '0', remark: '' })
+  return {
+    registrationFixed: isRecord(value) && typeof value.registrationFixed === 'string' ? value.registrationFixed : '0',
+    socialSecurityPerMonth: isRecord(value) && typeof value.socialSecurityPerMonth === 'string' ? value.socialSecurityPerMonth : '0',
+    extraCosts,
+  }
+}
+
+const sanitizeScenario = (value: ScenarioWithUnknownOthers): Scenario => ({
   ...value,
   staffing: value.staffing.map(st => ({ ...st, id: st.id || crypto.randomUUID() })),
   routing: {
@@ -102,6 +130,7 @@ const sanitizeScenario = (value: Scenario): Scenario => ({
     originConsulting: String(value.personalTax?.originConsulting ?? '0'),
     destinationConsulting: String(value.personalTax?.destinationConsulting ?? '0'),
   },
+  others: sanitizeOthers(value.others),
 })
 
 const defaultStaff: StaffingItem = {
@@ -119,6 +148,12 @@ const defaultStaff: StaffingItem = {
   weekendDays: 0,
   weekendMultiplier: '2.0',
 }
+
+const createDefaultOthers = (): Scenario['others'] => ({
+  registrationFixed: '0',
+  socialSecurityPerMonth: '0',
+  extraCosts: Array.from({ length: 3 }, () => ({ amount: '0', remark: '' })),
+})
 
 const initial: Scenario = {
   meta: { title: 'Mobilization — GitHub Pages (EN)', notes: 'Build ready to publish via Actions' },
@@ -140,6 +175,7 @@ const initial: Scenario = {
     tolls: '0', parking: '0', carExtraFees: '0'
   },
   allowances: { hotelPerNight: '140', mealsPerDay: '65', laundryPerWeek: '25', incidentalsPerDay: '12' },
+  others: createDefaultOthers(),
   taxes: { localTaxPct: '0', withholdingFixed: '0', applyTaxToLaborOnly: false },
   personalTax: { originConsulting: '0', destinationConsulting: '0' },
   contingencyPct: '7.5',
@@ -195,6 +231,11 @@ export default function App(){
   const incTotal = useMemo(()=> num(sc.allowances.incidentalsPerDay) * maxDays, [sc.allowances.incidentalsPerDay, maxDays])
   const perDiemTotal = hotelTotal + mealsTotal + laundryTotal + incTotal
 
+  // Others
+  const socialSecurityTotal = useMemo(() => (num(sc.others.socialSecurityPerMonth) * Math.max(maxDays, 0)) / 30, [sc.others.socialSecurityPerMonth, maxDays])
+  const otherExtrasTotal = useMemo(() => sc.others.extraCosts.reduce((sum, extra) => sum + num(extra.amount), 0), [sc.others.extraCosts])
+  const othersTotal = useMemo(() => num(sc.others.registrationFixed) + socialSecurityTotal + otherExtrasTotal, [sc.others.registrationFixed, socialSecurityTotal, otherExtrasTotal])
+
   // Staffing (multi-role)
   const laborBreakdown = useMemo(()=> sc.staffing.map(st=>{
     const baseH = st.onsiteDays * st.onsiteHoursPerDay
@@ -212,9 +253,9 @@ export default function App(){
 
   // Totals & taxes
   const travelFixedTotal = airfareTotal + vsiTotal + localTransportTotal
-  const taxableBase = sc.taxes.applyTaxToLaborOnly ? laborTotal : (laborTotal + perDiemTotal + travelFixedTotal + personalTaxTotal)
+  const taxableBase = sc.taxes.applyTaxToLaborOnly ? laborTotal : (laborTotal + perDiemTotal + travelFixedTotal + personalTaxTotal + othersTotal)
   const taxesTotal = taxableBase * (num(sc.taxes.localTaxPct)/100) + num(sc.taxes.withholdingFixed)
-  const subtotal = laborTotal + perDiemTotal + travelFixedTotal + personalTaxTotal + taxesTotal
+  const subtotal = laborTotal + perDiemTotal + travelFixedTotal + personalTaxTotal + othersTotal + taxesTotal
   const contingencyTotal = subtotal * (num(sc.contingencyPct)/100)
   const grandTotalBase = subtotal + contingencyTotal
   const converted = useMemo(()=> sc.currency.showTarget ? grandTotalBase * (num(sc.currency.rateBaseToTarget)||0) : null, [sc.currency.showTarget, sc.currency.rateBaseToTarget, grandTotalBase])
@@ -226,6 +267,7 @@ export default function App(){
       ['Allowances', perDiemTotal],
       ['Airfare', airfareTotal],
       ['Local transport', localTransportTotal],
+      ['Other costs', othersTotal],
       ['Personal tax support', personalTaxTotal],
       ['Taxes + Contingency', taxesTotal + contingencyTotal],
       ['Grand total', grandTotalBase],
@@ -444,6 +486,22 @@ export default function App(){
             <div className="mt-1 text-sm" style={{color:'var(--muted)'}}>Allowances total: <span className="total">{fmt(perDiemTotal, sc.currency.base)}</span></div>
           </Card>
 
+          <Card title="Others">
+            <div className="grid gap-3 md:grid-cols-2">
+              <div><label className="label">Registration fees (fixed)</label><input value={sc.others.registrationFixed} onChange={e=> setSc({...sc, others:{...sc.others, registrationFixed:e.target.value}})} /></div>
+              <div><label className="label">Social Security / month</label><input value={sc.others.socialSecurityPerMonth} onChange={e=> setSc({...sc, others:{...sc.others, socialSecurityPerMonth:e.target.value}})} /></div>
+            </div>
+            <div className="grid gap-3 mt-2">
+              {sc.others.extraCosts.map((extra, idx)=> (
+                <div key={idx} className="grid gap-2 md:grid-cols-3">
+                  <div><label className="label">Extra cost {idx + 1}</label><input value={extra.amount} onChange={e=> setSc(s=> ({...s, others:{...s.others, extraCosts: s.others.extraCosts.map((item, itemIdx)=> itemIdx===idx? {...item, amount:e.target.value}:item)}}))} /></div>
+                  <div className="md:col-span-2"><label className="label">Remark</label><input value={extra.remark} onChange={e=> setSc(s=> ({...s, others:{...s.others, extraCosts: s.others.extraCosts.map((item, itemIdx)=> itemIdx===idx? {...item, remark:e.target.value}:item)}}))} /></div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-1 text-sm" style={{color:'var(--muted)'}}>Other costs total: <span className="total">{fmt(othersTotal, sc.currency.base)}</span></div>
+          </Card>
+
           <Card title="Tax - Personal">
             <div className="grid gap-3 md:grid-cols-2">
               <div><label className="label">Tax consulting fees Country Origin (year)</label><input value={sc.personalTax.originConsulting} onChange={e=> setSc({...sc, personalTax:{...sc.personalTax, originConsulting:e.target.value}})} /></div>
@@ -493,6 +551,7 @@ export default function App(){
               <div>Allowances: <span className="total">{fmt(perDiemTotal, sc.currency.base)}</span></div>
               <div>Airfare: <span className="total">{fmt(airfareTotal, sc.currency.base)}</span></div>
               <div>Local transport: <span className="total">{fmt(localTransportTotal, sc.currency.base)}</span></div>
+              <div>Other costs: <span className="total">{fmt(othersTotal, sc.currency.base)}</span></div>
               <div>Personal tax support: <span className="total">{fmt(personalTaxTotal, sc.currency.base)}</span></div>
               <div>Taxes + Contingency: <span className="total">{fmt(taxesTotal + contingencyTotal, sc.currency.base)}</span></div>
               <div className="text-lg mt-2">GRAND TOTAL: <span className="total">{fmt(grandTotalBase, sc.currency.base)}</span> {sc.currency.showTarget && <span className="muted"> — converted: {fmt(converted||0, sc.currency.target)}</span>}</div>
